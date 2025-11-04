@@ -81,6 +81,21 @@ class Buffer:
         self.num_rdma_bytes = num_rdma_bytes
         self.low_latency_mode = low_latency_mode
         self.explicitly_destroy = explicitly_destroy
+
+        # Force CUDA synchronization before buffer init
+        try:
+            torch.cuda.synchronize()
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"CUDA synchronization failed before NVSHMEM initialization. "
+                f"Ensure CUDA is properly initialized on rank {self.rank}. Error: {e}"
+            )
+        # Ensure all ranks ready
+        if group is not None:
+            dist.barrier(group)
+        elif comm is not None:
+            comm.Barrier()
+
         self.runtime = deep_ep_cpp.Buffer(self.rank, self.group_size, num_nvl_bytes, num_rdma_bytes, low_latency_mode, explicitly_destroy)
 
         # Synchronize device IDs
